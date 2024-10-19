@@ -1,55 +1,55 @@
-# Configuration de l'adresse IP et activation de l'interface réseau
+# IP Address Configuration and Network Interface Activation
 
 ```bash
-ip address add [adresse_IP]/24 dev ethx
+ip address add [IP_address]/24 dev ethx
 ip link set up dev ethx
 ```
 
-- `ip address add` : Ajoute une adresse IP sur l'interface réseau `ethx`.
-- `ip link set up` : Active l'interface réseau `ethx`.
+- `ip address add`: Adds an IP address to the network interface `ethx`.
+- `ip link set up`: Brings the `ethx` network interface up.
 
-## Vérifications:
+## Verification Commands:
 
 ```bash
-ip a    # Affiche les interfaces réseau et leurs configurations (IP, état, etc.)
-ip r    # Affiche la table de routage
-ip n    # Affiche la table de voisinage (ARP)
-ping -c2 [adresse]    # Ping pour tester la connectivité (ici, 2 paquets envoyés)
+ip a    # Displays network interfaces and their configurations (IP, state, etc.)
+ip r    # Shows the routing table
+ip n    # Shows the neighbor table (ARP)
+ping -c2 [address]    # Ping to test connectivity (here, 2 packets sent)
 ```
 
-## Configuration du fichier `/etc/network/interfaces`
-Éditez le fichier `/etc/network/interfaces` pour configurer la connexion réseau permanente (statique ou DHCP).
+## Configuration of `/etc/network/interfaces`
+Edit the `/etc/network/interfaces` file to configure permanent network settings (static or DHCP).
 
 ```bash
 nano /etc/network/interfaces
 ```
 
-### Pour une adresse IP statique:
+### For a Static IP Address:
 ```bash
 auto ethx
 iface ethx inet static
-  address [adresse_IP]
+  address [IP_address]
   netmask 255.255.255.0
-  gateway [adresse_passerelle]
+  gateway [gateway_address]
 ```
 
-- `auto ethx` : Active automatiquement l'interface `ethx` au démarrage.
-- `iface ethx inet static` : Définit la configuration IP statique.
+- `auto ethx`: Automatically brings up the `ethx` interface at boot.
+- `iface ethx inet static`: Defines a static IP configuration.
 
-### Pour une adresse DHCP:
+### For a DHCP Configuration:
 ```bash
 auto ethx
 iface ethx inet dhcp
 ```
 
-## Activer le routage IP
-Éditez `/proc/sys/net/ipv4/ip_forward` pour activer le routage IP.
+## Enabling IP Forwarding
+Edit `/proc/sys/net/ipv4/ip_forward` to enable IP routing.
 
 ```bash
 nano /proc/sys/net/ipv4/ip_forward
 ```
 
-Assurez-vous que cette ligne est décommentée dans le fichier de configuration de sysctl:
+Ensure this line is uncommented in the sysctl configuration file:
 
 ```bash
 nano /etc/sysctl.conf
@@ -59,30 +59,30 @@ nano /etc/sysctl.conf
 net.ipv4.ip_forward = 1
 ```
 
-Appliquez les changements avec:
+Apply the changes with:
 
 ```bash
 sysctl -p
 ```
 
-## Configuration du serveur DHCP
-### 1. Fichier de configuration par défaut du serveur ISC DHCP:
+## DHCP Server Configuration
+### 1. Default Configuration File for the ISC DHCP Server:
 ```bash
 nano /etc/default/isc-dhcp-server
 ```
 
-Modifiez l'interface à écouter:
+Modify the interface to listen on:
 
 ```bash
 INTERFACESv4="ethx"
 ```
 
-### 2. Configuration du serveur DHCP (Plage d’adresses, options):
+### 2. DHCP Server Configuration (IP Range, Options):
 ```bash
 nano /etc/dhcp/dhcpd.conf
 ```
 
-Exemple de configuration:
+Example configuration:
 
 ```text
 subnet 192.168.1.0 netmask 255.255.255.0 {
@@ -92,59 +92,59 @@ subnet 192.168.1.0 netmask 255.255.255.0 {
 }
 ```
 
-- `range` : La plage d’adresses IP que le serveur DHCP attribuera.
-- `option routers` : L'adresse IP du routeur/passerelle.
-- `option domain-name-servers` : Serveurs DNS à utiliser.
+- `range`: The range of IP addresses the DHCP server will assign.
+- `option routers`: The IP address of the router/gateway.
+- `option domain-name-servers`: DNS servers to use.
 
-### 3. Vérification des logs:
-Les logs relatifs au serveur DHCP se trouvent dans:
+### 3. Checking Logs:
+DHCP server logs can be found in:
 
 ```bash
 tail -f /var/log/syslog
 ```
 
-### 4. Client DHCP:
-Pour demander une IP via DHCP sur une interface spécifique:
+### 4. DHCP Client:
+To request an IP address via DHCP for a specific interface:
 
 ```bash
 dhclient ethx
 ```
 
-## Configuration du routage manuel
-Dans `/etc/network/interfaces`, vous pouvez ajouter des routes manuellement avec ces commandes:
+## Manual Routing Configuration
+In `/etc/network/interfaces`, you can manually add routes using these commands:
 
 ```bash
-up ip route add default via [adresse_passerelle]
-up ip route add [adresse_réseau]/24 via [adresse_passarelle]
+up ip route add default via [gateway_address]
+up ip route add [network_address]/24 via [gateway_address]
 up ip route add [network/mask] via [gateway]
 ```
 
-## Utilisation des protocoles TCP/UDP
-### Serveur TCP:
+## Using TCP/UDP Protocols
+### TCP Server:
 ```bash
 nc -l [port]
 ```
 
-### Serveur UDP:
+### UDP Server:
 ```bash
 nc -l -u [port]
 ```
 
-## Option RFC 3442 (Routes statiques classless)
-Ajoutez cette option dans votre fichier `dhcpd.conf` pour définir des routes statiques classless selon la RFC 3442.
+## RFC 3442 Option (Classless Static Routes)
+Add this option in your `dhcpd.conf` file to define classless static routes according to RFC 3442.
 
 ```text
 option rfc3442-classless-static-routes code 121 = array of unsigned integer 8;
 ```
 
-## Flush d'adresse IP
-Si vous souhaitez supprimer les configurations IP d'une interface:
+## Flushing IP Address
+If you want to remove IP configurations from an interface:
 
 ```bash
 ip a flush dev ethx
 ```
 
-## Récapitulatif IP, passerelle, et masque:
-- **IP** : Adresse IP (e.g. `192.168.1.10`)
-- **Passerelle** : Adresse de la passerelle (routeur) (e.g. `192.168.1.1`)
-- **Masque** : Masque de sous-réseau (e.g. `255.255.255.0`)
+## IP, Gateway, and Subnet Mask Summary:
+- **IP**: IP Address (e.g., `192.168.1.10`)
+- **Gateway**: The gateway (router) address (e.g., `192.168.1.1`)
+- **Subnet Mask**: Subnet mask (e.g., `255.255.255.0`)
