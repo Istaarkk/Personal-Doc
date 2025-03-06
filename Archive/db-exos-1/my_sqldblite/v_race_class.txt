@@ -1,0 +1,53 @@
+race_long_name               cls_long_name          required_exp_by_level    bonus_hp_by_level    bonus_cp_by_level
+---------------------------  -------------------  -----------------------  -------------------  -------------------
+haut elf du moldor           Magicien                                4200                  3.6                  6.5
+orc                          Barbare                                 3900                  6.6                  3.3
+elf des forets               Magicien                                3800                  3.6                  6
+haut elf du moldor           Guerrier                                3600                  4.8                  5.6
+haut elf du moldor           Paladin                                 3600                  4.6                  5.8
+nain                         Magicien                                3600                  4.4                  6.3
+haut elf du moldor           Elementaliste                           3600                  4                    6.1
+haut elf du moldor           Pretre                                  3600                  4                    6
+haut elf du moldor           Aventurier standard                     3600                  4                    5.2
+humain de base               Magicien                                3600                  3.8                  5.5
+haut elf du moldor           Ninja                                   3600                  3.4                  5.2
+gnome des montagnes du nord  Magicien                                3600                  3.3                  6
+haut elf du moldor           Voleur                                  3600                  3.3                  5
+orc                          Guerrier                                3500                  6.1                  4.1
+orc                          Pretre                                  3500                  5.3                  4.5
+orc                          Aventurier standard                     3500                  5.3                  3.7
+orc                          Voleur                                  3500                  4.6                  3.5
+demi-orc                     Barbare                                 3400                  6.3                  3.8
+humain de base               Barbare                                 3400                  5.5                  3.8
+gnome des montagnes du nord  Barbare                                 3400                  5                    4.3
+elf des forets               Guerrier                                3200                  4.8                  5.1
+elf des forets               Paladin                                 3200                  4.6                  5.3
+elf des forets               Elementaliste                           3200                  4                    5.6
+elf des forets               Pretre                                  3200                  4                    5.5
+elf des forets               Aventurier standard                     3200                  4                    4.7
+elf des forets               Ninja                                   3200                  3.4                  4.7
+elf des forets               Voleur                                  3200                  3.3                  4.5
+demi-orc                     Guerrier                                3000                  5.8                  4.6
+nain                         Guerrier                                3000                  5.6                  5.4
+demi-orc                     Paladin                                 3000                  5.6                  4.8
+nain                         Paladin                                 3000                  5.4                  5.6
+demi-orc                     Pretre                                  3000                  5                    5
+humain de base               Guerrier                                3000                  5                    4.6
+demi-orc                     Aventurier standard                     3000                  5                    4.2
+nain                         Elementaliste                           3000                  4.8                  5.9
+nain                         Pretre                                  3000                  4.8                  5.8
+nain                         Aventurier standard                     3000                  4.8                  5
+humain de base               Paladin                                 3000                  4.8                  4.8
+gnome des montagnes du nord  Guerrier                                3000                  4.5                  5.1
+demi-orc                     Voleur                                  3000                  4.3                  4
+humain de base               Elementaliste                           3000                  4.2                  5.1
+humain de base               Pretre                                  3000                  4.2                  5
+humain de base               Aventurier standard                     3000                  4.2                  4.2
+nain                         Voleur                                  3000                  4.1                  4.8
+gnome des montagnes du nord  Elementaliste                           3000                  3.7                  5.6
+gnome des montagnes du nord  Pretre                                  3000                  3.7                  5.5
+gnome des montagnes du nord  Aventurier standard                     3000                  3.7                  4.7
+humain de base               Ninja                                   3000                  3.6                  4.2
+humain de base               Voleur                                  3000                  3.5                  4
+gnome des montagnes du nord  Ninja                                   3000                  3.1                  4.7
+gnome des montagnes du nord  Voleur                                  3000                  3                    4.5
