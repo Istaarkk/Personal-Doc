@@ -1,35 +1,25 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 import os
 import json
-import yaml
 import re
 from collections import defaultdict, deque
 from typing import Dict, Set, List, Any, Optional, Tuple, Iterable
 from pathlib import Path
 
-# -------------------------------------------------------------
-# XSOAR Crawler — version "+grep -rni" (réduction des faux positifs)
-# -------------------------------------------------------------
-# Objectifs de cette version :
-#  1) Séparer clairement les vraies dépendances d'objets XSOAR
-#     (playbooks, scripts/automations, intégrations, types, champs, layouts,
-#      widgets, classifiers, mappers, reports)
-#     de toutes les autres références (context paths, champs incident, commandes,
-#     valeurs par défaut, etc.) pour réduire les faux positifs.
-#  2) Implémenter un "grep -rni" natif en Python pour confirmer l'usage réel
-#     des objets dans la codebase (avec numéros de ligne, insensible à la casse,
-#     récursif, filtres d'exclusion).
-#  3) Ne retenir dans l'inventaire final que les objets non natifs ET utilisés
-#     (au moins une occurrence hors de leur fichier de définition et hors /Tests...).
-# -------------------------------------------------------------
+# Dépendance: PyYAML
+# pip install pyyaml
+import yaml
 
 
 def _is_binary_file(path: Path, blocksize: int = 1024) -> bool:
+    """Heuristique pour ignorer les fichiers binaires pendant le grep."""
     try:
         with open(path, 'rb') as f:
             chunk = f.read(blocksize)
         if b"\0" in chunk:
             return True
-        # Heuristique simple : si + de 30% d'octets sont > 0x7F, probable binaire
         if chunk:
             high = sum(1 for b in chunk if b > 0x7F)
             return high / len(chunk) > 0.30
@@ -39,6 +29,7 @@ def _is_binary_file(path: Path, blocksize: int = 1024) -> bool:
 
 
 def _safe_load_yaml_or_json(file_path: Path) -> Optional[Dict[str, Any]]:
+    """Charge YAML/JSON en dict, sinon None."""
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             text = f.read()
@@ -60,15 +51,17 @@ def _safe_load_yaml_or_json(file_path: Path) -> Optional[Dict[str, Any]]:
 
 
 class XSOARCrawler:
+    """
+    Crawler XSOAR avec détection stricte des objets, extraction de dépendances “dures”,
+    séparation des références “molles” (context/commands), et GREP -rni intégré.
+    """
     def __init__(self, input_path: str, output_path: str, *, custom_only: bool = True, used_only: bool = True):
         self.input_path = Path(input_path)
         self.output_path = Path(output_path)
         self.custom_only = custom_only
         self.used_only = used_only
 
-        # -------------------------------
-        # Détection stricte des fichiers
-        # -------------------------------
+        # Détection stricte des fichiers d'objets XSOAR
         self.object_patterns = {
             'playbook': {
                 'patterns': [r'playbook-(.+)\.ya?ml$', r'.*[Pp]laybook.*\.ya?ml$'],
@@ -127,7 +120,7 @@ class XSOARCrawler:
             }
         }
 
-        # Extraction ciblée des dépendances (objets uniquement)
+        # Extraction ciblée des dépendances “dures” (seulement objets)
         self.dependency_extractors = {
             'playbook': self._extract_playbook_object_deps,
             'automation': self._extract_automation_object_deps,
@@ -141,7 +134,7 @@ class XSOARCrawler:
             'report': self._extract_report_object_deps,
         }
 
-        # Références non-objets (pour info diagnostics, pas comptées comme deps)
+        # Références “molles” pour diagnostic (non comptées comme deps d’objets)
         self.soft_ref_extractors = {
             'playbook': self._extract_playbook_soft_refs,
             'automation': self._extract_automation_soft_refs,
@@ -168,10 +161,11 @@ class XSOARCrawler:
             },
             'min_length': 3,
             'max_length': 120,
-            'invalid_chars': r'[<>"\'"'"'`()\[\]{}]'
+            # NOTE: chaîne “normale” (pas raw) pour limiter les pièges d’échappement
+            'invalid_chars': "[<>()\\[\\]{}\\\"'`]"
         }
 
-        # Dossiers/Extensions ignorés pour le grep et pour la détection d'usage
+        # Grep: répertoires & extensions à ignorer
         self.ignore_dirs = {
             '.git', '.idea', '.vscode', '__pycache__', '.pytest_cache', '.tox', '.eggs',
             'dist', 'build', 'node_modules', 'venv', 'env', 'Tests', 'TestPlaybooks'
@@ -180,7 +174,7 @@ class XSOARCrawler:
             '.yml', '.yaml', '.json', '.md', '.py', '.ps1', '.sh', '.js', '.ts', '.tsx'
         }
 
-        # Heuristique "natif"
+        # Heuristique “natif” à ignorer par défaut
         self.native_path_markers = [
             '/Packs/Base/', '/Packs/Legacy/', '/Packs/CommonPlaybooks/',
             '/Packs/CommonTypes/', '/Packs/CommonScripts/'
@@ -190,8 +184,6 @@ class XSOARCrawler:
         self.object_registry: Dict[str, Dict[str, Any]] = {}
         self.file_registry: Dict[str, str] = {}
         self.statistics = defaultdict(int)
-
-        # Usages trouvés via grep: key -> [occurrences]
         self.usage_index: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
 
     # -------------------------
@@ -224,7 +216,7 @@ class XSOARCrawler:
             value = self._get_nested_value(data, field_path)
             if isinstance(value, str) and value.strip():
                 return value.strip()
-        # fallback: enlever le préfixe pattern si possible
+        # fallback: enlever le préfixe de nom si possible
         base_name = filename
         for pattern in config.get('patterns', []):
             m = re.match(pattern, filename, re.IGNORECASE)
@@ -301,14 +293,13 @@ class XSOARCrawler:
             return False
         if ref in self.noise_filters['system_commands']:
             return False
-        # Bruit typique à ignorer
         exclude_patterns = [
-            r'^\d+$',                  # nombres
-            r'^[a-f0-9-]{36}$',         # UUID
-            r'^\$\{.*\}$',           # variables non résolues
-            r'^https?://',              # URLs
-            r'^\w+@\w+\.',           # emails
-            r'\s',                     # espaces multiples -> éviter les phrases
+            r'^\d+$',               # nombres
+            r'^[a-f0-9-]{36}$',     # UUID
+            r'^\$\{.*\}$',          # variables non résolues
+            r'^https?://',          # URLs
+            r'^\w+@\w+\.',          # emails
+            r'\s',                  # contient des espaces → phrase/texte
         ]
         for p in exclude_patterns:
             if re.search(p, ref, re.IGNORECASE):
@@ -327,25 +318,22 @@ class XSOARCrawler:
             pbid = task.get('playbookId')
             if isinstance(pbid, str) and self.is_valid_reference(pbid):
                 deps.add(pbid)
-            # Scripts/Automations
-            for k in ('scriptId',):
-                val = task.get(k)
-                if isinstance(val, str) and self.is_valid_reference(val):
-                    deps.add(val)
-            # Certains exports utilisent 'script' avec un nom, éviter les commandes (!cmd)
+            # Scripts/Automations par ID
+            val = task.get('scriptId')
+            if isinstance(val, str) and self.is_valid_reference(val):
+                deps.add(val)
+            # Certains exports utilisent 'script' (nom de script) — éviter les commandes !cmd
             sc = task.get('script')
             if isinstance(sc, str) and not sc.strip().startswith('!') and self.is_valid_reference(sc):
                 deps.add(sc)
         return deps
 
     def _extract_automation_object_deps(self, data: Dict) -> Set[str]:
-        deps = set()
-        # Automations peuvent appeler d'autres automations via 'script' dans code YAML (rare)
-        # On reste conservateur: on NE compte PAS les context paths ni les commandes d'intégration.
-        return deps
+        # Une automation ne dépend typiquement pas d'autres objets XSOAR
+        return set()
 
     def _extract_integration_object_deps(self, data: Dict) -> Set[str]:
-        # Une intégration ne dépend normalement pas d'autres objets XSOAR (ses commands ne sont pas des deps)
+        # Idem : ne dépend pas d'autres objets (ses commands ne sont pas des objets)
         return set()
 
     def _extract_incident_type_object_deps(self, data: Dict) -> Set[str]:
@@ -356,7 +344,6 @@ class XSOARCrawler:
         return deps
 
     def _extract_field_object_deps(self, data: Dict) -> Set[str]:
-        # Un champ peut référencer un script (validation/trigger) -> dépendance d'automation
         deps = set()
         sc = data.get('script')
         if isinstance(sc, str) and self.is_valid_reference(sc):
@@ -364,11 +351,10 @@ class XSOARCrawler:
         return deps
 
     def _extract_layout_object_deps(self, data: Dict) -> Set[str]:
-        # Layouts référencent des champs (pas des objets). Pas de deps strictes d'objets.
+        # Layouts référencent des champs (pas d'objets)
         return set()
 
     def _extract_widget_object_deps(self, data: Dict) -> Set[str]:
-        # Un widget peut référencer un script custom
         deps = set()
         sc = data.get('script')
         if isinstance(sc, str) and self.is_valid_reference(sc):
@@ -376,15 +362,14 @@ class XSOARCrawler:
         return deps
 
     def _extract_classifier_object_deps(self, data: Dict) -> Set[str]:
-        # Classifier: pas de deps d'objets (mappe des valeurs brutes)
+        # Pas de deps d'objets
         return set()
 
     def _extract_mapper_object_deps(self, data: Dict) -> Set[str]:
-        # Mapper: pas de deps d'objets
+        # Pas de deps d'objets
         return set()
 
     def _extract_report_object_deps(self, data: Dict) -> Set[str]:
-        # Report: peut référencer des widgets -> considérer comme deps
         deps = set()
         widgets = data.get('widgets', []) or []
         for w in widgets:
@@ -395,20 +380,16 @@ class XSOARCrawler:
         return deps
 
     # ----------------------------------------------------
-    # Extraction SOFT REFS (contexte/champs/commandes/etc.)
+    # Références SOFT (pour info : context/fields/commands)
     # ----------------------------------------------------
     def _extract_playbook_soft_refs(self, data: Dict) -> Dict[str, Set[str]]:
         refs = {'context_paths': set(), 'incident_fields': set(), 'commands': set()}
         tasks = data.get('tasks', {}) or {}
         for t in tasks.values():
             task = (t or {}).get('task', {}) or {}
-            for k in ('script',):
-                sc = task.get(k)
-                if isinstance(sc, str) and sc.strip().startswith('!'):
-                    # Ex: "!integration-command" => commande d'intégration
-                    refs['commands'].add(sc.strip()[1:])
-            # context paths dans outputs/nexttasks/conditions (conservateur)
-        # Inputs/outputs (contextPath)
+            sc = task.get('script')
+            if isinstance(sc, str) and sc.strip().startswith('!'):
+                refs['commands'].add(sc.strip()[1:])
         for sec in ('inputs', 'outputs'):
             for it in data.get(sec, []) or []:
                 if isinstance(it, dict):
@@ -423,7 +404,6 @@ class XSOARCrawler:
         for dep in script_data.get('depends_on', []) or []:
             if isinstance(dep, dict) and isinstance(dep.get('name'), str):
                 refs['commands'].add(dep['name'])
-        # Arguments par défaut incident.xxx -> champs
         for arg in (data.get('args') or []):
             if isinstance(arg, dict):
                 dv = arg.get('defaultValue')
@@ -489,13 +469,7 @@ class XSOARCrawler:
         return refs
 
     def _extract_classifier_soft_refs(self, data: Dict) -> Dict[str, Set[str]]:
-        refs = {'context_paths': set(), 'incident_fields': set(), 'commands': set()}
-        mapping = data.get('mapping', {}) or {}
-        for v in mapping.values():
-            if isinstance(v, str):
-                # valeurs brutes mappées vers types
-                pass
-        return refs
+        return {'context_paths': set(), 'incident_fields': set(), 'commands': set()}
 
     def _extract_mapper_soft_refs(self, data: Dict) -> Dict[str, Set[str]]:
         refs = {'context_paths': set(), 'incident_fields': set(), 'commands': set()}
@@ -538,7 +512,7 @@ class XSOARCrawler:
                 cand = f"{obj_type}:{p}{ref_norm}"
                 if cand in self.object_registry:
                     return cand
-        # 3) Correspondance partielle assez longue
+        # 3) Correspondance partielle (≥4 chars)
         low = ref_norm.lower()
         if len(low) >= 4:
             for key, obj in self.object_registry.items():
@@ -554,12 +528,13 @@ class XSOARCrawler:
         obj = self.object_registry[obj_key]
         oid = obj['id']
         terms = {oid}
-        # Ajouter version "sans préfixe"
-        for pref in ['playbook-', 'automation-', 'script-', 'incidenttype-', 'incidentfield-',
-                     'field-', 'layoutscontainer-', 'layout-', 'widget-', 'reputation-', 'indicator-']:
+        # Version sans préfixe
+        for pref in ['playbook-', 'automation-', 'script-', 'incidenttype-',
+                     'incidentfield-', 'field-', 'layoutscontainer-', 'layout-',
+                     'widget-', 'reputation-', 'indicator-']:
             if oid.startswith(pref):
                 terms.add(oid[len(pref):])
-        # Nom affiché alternatif
+        # Nom alternatif
         data = obj.get('data', {}) or {}
         alt = None
         if obj['type'] == 'integration':
@@ -577,12 +552,12 @@ class XSOARCrawler:
         return sorted(terms, key=lambda s: (-len(s), s))  # longs d'abord
 
     def _compile_patterns(self, terms: List[str]) -> Tuple[re.Pattern, re.Pattern]:
-        # Pattern 1: clé explicite (YAML/JSON) ex: playbookId: NAME | scriptId: NAME | script: NAME
+        # Pattern 1: clé explicite (YAML/JSON)
         joined = '|'.join(re.escape(t) for t in terms)
         keynames = r'(?:playbookId|scriptId|script|id|classifierId|mapperId|layout|incidenttype|type|widget)'
-        p1 = re.compile(fr'(?i)\b{keynames}\s*:\s*(?:"|\')?\s*(?:{joined})\b')
+        p1 = re.compile(rf'(?i)\b{keynames}\s*:\s*(?:"|\')?\s*(?:{joined})\b')
         # Pattern 2: occurrence générique avec délimiteurs (pour .py/.md/etc.)
-        p2 = re.compile(fr'(?i)(?<![\w-])(?:{joined})(?![\w-])')
+        p2 = re.compile(rf'(?i)(?<![\w-])(?:{joined})(?![\w-])')
         return p1, p2
 
     def _should_skip_path(self, path: Path) -> bool:
@@ -611,7 +586,7 @@ class XSOARCrawler:
                 continue
             if self._should_skip_path(path):
                 continue
-            # Éviter le propre fichier de l'objet
+            # éviter le propre fichier de définition
             try:
                 if path.resolve() == own_path:
                     continue
@@ -621,7 +596,6 @@ class XSOARCrawler:
                 with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                     for idx, line in enumerate(f, start=1):
                         if p1.search(line) or p2.search(line):
-                            # ignorer probablement les commentaires simples
                             striped = line.strip()
                             if striped.startswith('#') or striped.startswith('//'):
                                 continue
@@ -643,7 +617,7 @@ class XSOARCrawler:
         if not self.object_registry:
             return {'error': 'Aucun objet XSOAR custom détecté.'}
 
-        # 2) Dépendances (graph restreint à objets)
+        # 2) Dépendances (objets seulement)
         results: Dict[str, Dict[str, Any]] = {}
         processed = set()
         queue = deque()
@@ -698,7 +672,7 @@ class XSOARCrawler:
         # 3) GREP usages pour chaque objet
         for uk in self.object_registry.keys():
             occ = self.grep_rni_for_object(uk)
-            # Filtrer encore: ignorer occurrences sous /Tests/ et doublons par (f,l)
+            # Filtrer : ignorer occurrences sous dossiers ignorés + dédoublonner par (fichier,ligne)
             seen = set()
             filtered = []
             for o in occ:
@@ -712,18 +686,31 @@ class XSOARCrawler:
                 filtered.append(o)
             self.usage_index[uk] = filtered
 
-        # 4) Option: ne garder que les objets "utilisés"
+        # 4) Option: ne garder que les objets “utilisés” (>=1 hit grep)
         used_keys = set(self.object_registry.keys())
         if self.used_only:
             used_keys = {uk for uk, occ in self.usage_index.items() if len(occ) > 0}
 
-        # 5) Construction du rapport
+        # 5) Rapport + liste dédiée d’objets utilisés
         analysis_results = {uk: v for uk, v in results.items() if uk in used_keys}
         report = self._make_report(analysis_results, used_keys)
+
+        used_objects = []
+        for uk in sorted(used_keys):
+            obj = self.object_registry[uk]
+            used_objects.append({
+                'key': uk,
+                'id': obj['id'],
+                'type': obj['type'],
+                'filename': obj['filename'],
+                'usage_count': len(self.usage_index.get(uk, [])),
+            })
+
         return {
             'analysis_results': analysis_results,
             'report': report,
             'usage_index': self.usage_index,
+            'used_objects': used_objects,
             'stats': dict(self.statistics),
         }
 
@@ -743,8 +730,13 @@ class XSOARCrawler:
                 reverse_deps[dk].add(uk)
         for t, s in type_stats.items():
             if s['count']:
-                s['avg_deps'] = round(sum(analysis_results[k]['dependency_count'] for k in analysis_results if analysis_results[k]['object']['type'] == t) / s['count'], 2)
-        most_ref = sorted(((k, len(v)) for k, v in reverse_deps.items()), key=lambda x: x[1], reverse=True)[:10]
+                s['avg_deps'] = round(
+                    sum(analysis_results[k]['dependency_count']
+                        for k in analysis_results
+                        if analysis_results[k]['object']['type'] == t) / s['count'], 2
+                )
+        most_ref = sorted(((k, len(v)) for k, v in reverse_deps.items()),
+                          key=lambda x: x[1], reverse=True)[:10]
         out = {
             'summary': {
                 'total_custom_objects_indexed': len(self.object_registry),
@@ -776,13 +768,21 @@ class XSOARCrawler:
         summary = self.output_path / 'xsoar_dependencies_summary.json'
         with open(summary, 'w', encoding='utf-8') as f:
             json.dump(results.get('report', {}), f, indent=2, ensure_ascii=False)
-        # CSV (uniquement vraies deps d'objets + non résolus + occurrences grep consolidées)
+        # CSV (dépendances d’objets + non-résolus)
         csv_path = self.output_path / 'xsoar_dependencies_report.csv'
         self._save_csv(csv_path, results['analysis_results'])
         # Usages détaillés (grep)
         usages_path = self.output_path / 'xsoar_usages_grep.json'
         with open(usages_path, 'w', encoding='utf-8') as f:
             json.dump(self.usage_index, f, indent=2, ensure_ascii=False)
+        # Nouveaux: liste “objets utilisés”
+        used_json = self.output_path / 'xsoar_used_objects.json'
+        with open(used_json, 'w', encoding='utf-8') as f:
+            json.dump(results.get('used_objects', []), f, indent=2, ensure_ascii=False)
+        used_txt = self.output_path / 'xsoar_used_objects.txt'
+        with open(used_txt, 'w', encoding='utf-8') as f:
+            for item in results.get('used_objects', []):
+                f.write(f"{item['type']};{item['id']};{item['filename']};uses={item['usage_count']}\n")
 
     def _save_csv(self, path: Path, analysis_results: Dict[str, Any]) -> None:
         import csv
@@ -795,7 +795,7 @@ class XSOARCrawler:
                 for ck, cinfo in res['dependencies'].items():
                     ctx = f"{cinfo['id']} référencé par {p['id']}"
                     w.writerow([p['id'], p['type'], 'Trouvé', cinfo['id'], cinfo['type'], 'Trouvé', 1, ctx])
-            # Non résolues (candidats objets)
+            # Non résolues
             for pk, res in analysis_results.items():
                 p = res['object']
                 for u in res['unresolved']:
@@ -805,13 +805,15 @@ class XSOARCrawler:
     # ---------------
     # Entrée principale
     # ---------------
-    def run(self, start_files: Optional[List[str]] = None) -> None:
+    def run(self, start_files: Optional[List[str]] = None, print_used: bool = False) -> None:
         results = self.analyze(start_files)
         if 'error' in results:
             print('❌', results['error'])
             return
         self.save_outputs(results)
         self.print_summary(results['report'])
+        if print_used:
+            self.print_used_objects(results.get('used_objects', []))
 
     def print_summary(self, report: Dict[str, Any]) -> None:
         print("\n" + "="*60)
@@ -829,6 +831,16 @@ class XSOARCrawler:
             for item in report['most_referenced_objects'][:5]:
                 print(f"  * {item['object']} ({item['type']}) -> {item['reference_count']} références")
 
+    def print_used_objects(self, used_objects: List[Dict[str, Any]]) -> None:
+        print("\n" + "-"*60)
+        print("📌 Objets UTILISÉS (nom/type/fichier/occurrences grep)")
+        print("-"*60)
+        if not used_objects:
+            print("(aucun)")
+            return
+        for it in used_objects:
+            print(f"- {it['id']}  [{it['type']}]  ({it['filename']})  uses={it['usage_count']}")
+
 
 if __name__ == '__main__':
     import argparse
@@ -838,12 +850,13 @@ if __name__ == '__main__':
     parser.add_argument('--all', action='store_true', help='Inclure aussi les objets non utilisés (désactive used_only)')
     parser.add_argument('--include-native', action='store_true', help='Inclure les objets natifs (désactive custom_only)')
     parser.add_argument('--start', nargs='*', help='Analyser à partir de fichiers précis (noms exacts)')
-    args = parser.parse_args()
+    parser.add_argument('--print-used', action='store_true', help='Afficher la liste des objets utilisés (stdout)')
 
+    args = parser.parse_args()
     crawler = XSOARCrawler(
         input_path=args.input,
         output_path=args.output,
         custom_only=not args.include_native,
         used_only=not args.all,
     )
-    crawler.run(start_files=args.start)
+    crawler.run(start_files=args.start, print_used=args.print_used)
